@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Register</h2>
+<form method="POST">
+  {{ form.hidden_tag() }}
+  <div class="mb-3">
+    {{ form.username.label(class="form-label") }} 
+    {{ form.username(class="form-control", placeholder="Choose a username") }}
+  </div>
+  <div class="mb-3">
+    {{ form.password.label(class="form-label") }} 
+    {{ form.password(class="form-control", placeholder="Create a password") }}
+  </div>
+  <div class="mb-3">
+    {{ form.confirm.label(class="form-label") }} 
+    {{ form.confirm(class="form-control", placeholder="Confirm your password") }}
+  </div>
+  <div class="mb-3">
+    {{ form.role.label(class="form-label") }} 
+    {{ form.role(class="form-select") }}
+  </div>
+  {{ form.submit(class="btn btn-primary w-100") }}
+  <div class="text-center mt-3">
+    <a href="{{ url_for('auth.login') }}">Already have an account? Login</a>
+  </div>
+</form>
+{% endblock %}

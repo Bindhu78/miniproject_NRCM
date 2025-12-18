@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 id="receiver-title" class="text-center mb-5">RECEIVER DECRYPTION INTERFACE</h2>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="scanline-overlay h-100 d-flex flex-column">
+            <label for="all-lines-input" class="form-label">PASTE FULL ENCRYPTED TRANSMISSION:</label>
+            <textarea id="all-lines-input" class="form-control sci-fi-screen flex-grow-1" rows="10" placeholder="AWAITING ENCRYPTED DATA STREAM..."></textarea>
+        </div>
+    </div>
+    <div class="col-lg-5 d-flex flex-column justify-content-center align-items-center">
+        <button id="automate-decrypt-button" class="btn btn-info w-100 mb-3 py-3">INITIATE DECRYPTION PROTOCOL</button>
+        <p class="form-text text-center" style="color: var(--accent-color-primary); font-size: 0.8rem; text-transform:none;">
+            Ensure all data packets are pasted accurately. System will process sequentially.
+        </p>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <label for="automation-log-container" class="form-label">SYSTEM LOG // DECRYPTION STATUS:</label>
+        <div id="automation-log-container" class="sci-fi-screen scanline-overlay" style="min-height: 200px; height: 30vh; max-height: 300px; white-space: pre-wrap; overflow-wrap: break-word;"></div>
+    </div>
+    <div class="col-md-6">
+        <label for="decryption-buffer-display" class="form-label">LIVE DECRYPTION BUFFER:</label>
+        <div id="decryption-buffer-display" class="sci-fi-screen scanline-overlay" style="min-height: 200px; height: 30vh; max-height: 300px; white-space: pre-wrap; overflow-wrap: break-word;"></div>
+    </div>
+</div>
+
+
+{# This form is hidden and submitted by JavaScript. It sends the CUMULATIVE snippets. #}
+<form method="POST" id="decrypt-form" class="d-none"> 
+  {{ form.hidden_tag() }}
+  {# This 'snippets' textarea is what Flask's DecodeForm().snippets.data will receive #}
+  <textarea id="form-snippets-textarea" name="snippets" class="d-none"></textarea> 
+  <input type="submit" id="decrypt-submit-button" class="d-none">
+</form>
+
+
+{% if message %}
+  <div class="mt-5">
+    <h4 class="text-center text-processing-glow">TRANSMISSION DECODED:</h4>
+    <div class="alert alert-success sci-fi-screen p-3" style="font-size: 1.1rem; white-space: pre-wrap; overflow-wrap: break-word;">{{ message }}</div>
+  </div>
+{% endif %}
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const allLinesInputEl = document.getElementById('all-lines-input');
+    const automateButtonEl = document.getElementById('automate-decrypt-button');
+    const formSnippetsTextareaEl = document.getElementById('form-snippets-textarea'); 
+    const decryptSubmitButtonEl = document.getElementById('decrypt-submit-button');
+    
+    const automationLogContainerEl = document.getElementById('automation-log-container');
+    const decryptionBufferDisplayEl = document.getElementById('decryption-buffer-display');
+    const receiverTitleEl = document.getElementById('receiver-title');
+
+    const STATE_KEY = 'decryptionAutomationState_v2'; // Use a new key if structure changes
+
+    // --- Sound Effect Placeholders (Optional) ---
+    // const sfx = {
+    //     typing: new Audio('/static/sounds/sci_fi_type.wav'), // Replace with your actual paths
+    //     submit: new Audio('/static/sounds/sci_fi_submit.wav'),
+    //     success: new Audio('/static/sounds/sci_fi_success.wav'),
+    //     error: new Audio('/static/sounds/sci_fi_error.wav'),
+    //     processing: new Audio('/static/sounds/sci_fi_processing_loop.wav') // Loop this one
+    // };
+    // if(sfx.processing) sfx.processing.loop = true;
+
+    function typeEffect(element, text, callback, speed = 25, clearExisting = false) {
+        let i = 0;
+        if (clearExisting) element.innerHTML = '';
+        
+        const existingContent = element.innerHTML; // Keep existing non-cursor content
+        element.innerHTML = existingContent; // Re-set to ensure cursor is at end
+
+        const cursor = document.createElement('span');
+        cursor.className = 'typing-cursor';
+        element.appendChild(cursor);
+
+        function type() {
+            if (i < text.length) {
+                // if(sfx.typing && !sfx.typing.paused && sfx.typing.currentTime > 0) sfx.typing.currentTime = 0;
+                // if(sfx.typing) sfx.typing.play();
+                element.insertBefore(document.createTextNode(text.charAt(i)), cursor);
+                i++;
+                setTimeout(type, speed);
+            } else {
+                if(cursor) cursor.remove();
+                if (callback) callback();
+            }
+        }
+        type();
+    }
+    
+    function appendLog(message, isError = false, noType = false) {
+        const logEntry = document.createElement('div');
+        if(isError) logEntry.style.color = 'var(--accent-color-warning, #ffcc00)';
+
+        const prompt = document.createTextNode(`[SYS] ${new Date().toLocaleTimeString()}: `);
+        logEntry.appendChild(prompt);
+        
+        const messageSpan = document.createElement('span');
+        logEntry.appendChild(messageSpan);
+        
+        automationLogContainerEl.appendChild(logEntry);
+        
+        if (noType) {
+            messageSpan.textContent = message;
+            automationLogContainerEl.scrollTop = automationLogContainerEl.scrollHeight;
+        } else {
+            typeEffect(messageSpan, message, () => {
+                automationLogContainerEl.scrollTop = automationLogContainerEl.scrollHeight;
+            }, 20);
+        }
+    }
+
+    function updateVisualBuffer(newLine, noType = false) {
+        const lineBreak = decryptionBufferDisplayEl.innerHTML ? document.createElement('br') : null;
+        if (lineBreak) decryptionBufferDisplayEl.appendChild(lineBreak);
+        
+        const lineSpan = document.createElement('span');
+        decryptionBufferDisplayEl.appendChild(lineSpan);
+
+        if (noType) {
+            lineSpan.textContent = newLine;
+            decryptionBufferDisplayEl.scrollTop = decryptionBufferDisplayEl.scrollHeight;
+        } else {
+            typeEffect(lineSpan, newLine, () => {
+                decryptionBufferDisplayEl.scrollTop = decryptionBufferDisplayEl.scrollHeight;
+            }, 10);
+        }
+    }
+    
+    function setProcessingState(isProcessing) {
+        if (isProcessing) {
+            if(receiverTitleEl) receiverTitleEl.classList.add('text-processing-glow');
+            if(automateButtonEl) {
+                automateButtonEl.classList.add('processing-glow');
+                automateButtonEl.disabled = true;
+                automateButtonEl.textContent = 'DECRYPTION IN PROGRESS... STAND BY';
+            }
+            if(allLinesInputEl) allLinesInputEl.disabled = true;
+            // if(sfx.processing) sfx.processing.play();
+        } else {
+            if(receiverTitleEl) receiverTitleEl.classList.remove('text-processing-glow');
+            if(automateButtonEl) {
+                automateButtonEl.classList.remove('processing-glow');
+                automateButtonEl.disabled = false;
+                automateButtonEl.textContent = 'INITIATE DECRYPTION PROTOCOL';
+            }
+            if(allLinesInputEl) allLinesInputEl.disabled = false;
+            // if(sfx.processing) sfx.processing.pause();
+        }
+    }
+
+    function processNextStep() {
+        let state;
+        try {
+            state = JSON.parse(localStorage.getItem(STATE_KEY));
+        } catch (e) { state = null; localStorage.removeItem(STATE_KEY); }
+        
+        if (!formSnippetsTextareaEl || !decryptSubmitButtonEl) {
+            appendLog('CRITICAL SYSTEM FAILURE: FORM COMPONENTS OFFLINE. PROTOCOL ABORTED.', true);
+            localStorage.removeItem(STATE_KEY);
+            setProcessingState(false);
+            return;
+        }
+        
+        if (state && state.lines && state.currentIndex < state.lines.length) {
+            setProcessingState(true);
+            appendLog(`PROCESSING DATA PACKET ${state.currentIndex + 1}/${state.lines.length}...`);
+            
+            const currentLine = state.lines[state.currentIndex];
+            
+            let currentFormSnippets = formSnippetsTextareaEl.value;
+            formSnippetsTextareaEl.value = currentFormSnippets ? `${currentFormSnippets}\n${currentLine}` : currentLine;
+            
+            updateVisualBuffer(currentLine);
+
+            appendLog(`PACKET [${currentLine.substring(0,25)}...] INTEGRATED. TRANSMITTING TO CORE...`);
+
+            state.currentIndex++;
+            localStorage.setItem(STATE_KEY, JSON.stringify(state));
+            
+            // if(sfx.submit) sfx.submit.play();
+            setTimeout(() => decryptSubmitButtonEl.click(), 700); // Increased delay for more "processing" feel
+
+        } else if (state && state.lines && state.currentIndex >= state.lines.length) {
+            appendLog('DECRYPTION PROTOCOL COMPLETE. ALL DATA PACKETS PROCESSED.');
+            // if(sfx.success) sfx.success.play();
+            localStorage.removeItem(STATE_KEY);
+            setProcessingState(false);
+        } else { 
+            setProcessingState(false); // No state or invalid state
+        }
+    }
+
+    if (automateButtonEl) {
+        automateButtonEl.addEventListener('click', () => {
+            if (!allLinesInputEl || !formSnippetsTextareaEl || !decryptSubmitButtonEl) {
+                alert('SYSTEM ERROR: DECRYPTION INTERFACE MALFUNCTION.');
+                // if(sfx.error) sfx.error.play();
+                return;
+            }
+
+            const allLines = allLinesInputEl.value.trim().split('\n').filter(line => line.trim() !== '');
+            if (allLines.length === 0) {
+                appendLog('NO DATA STREAM DETECTED. INPUT ENCRYPTED LINES.', true);
+                // if(sfx.error) sfx.error.play();
+                alert('PASTE ENCRYPTED DATA INTO THE PROVIDED FIELD.');
+                return;
+            }
+
+            formSnippetsTextareaEl.value = ''; 
+            decryptionBufferDisplayEl.innerHTML = ''; 
+            automationLogContainerEl.innerHTML = ''; 
+            appendLog('DECRYPTION BUFFER PURGED. INITIALIZING NEW SEQUENCE...');
+            
+            const initialState = { lines: allLines, currentIndex: 0 };
+            localStorage.setItem(STATE_KEY, JSON.stringify(initialState));
+            
+            appendLog(`LOCKING INPUT. ${allLines.length} DATA PACKETS IDENTIFIED FOR DECRYPTION.`);
+            setProcessingState(true);
+            
+            processNextStep();
+        });
+    }
+
+    // On page load, handle resuming state
+    setTimeout(() => {
+        let state;
+        try { state = JSON.parse(localStorage.getItem(STATE_KEY)); } catch (e) { state = null; }
+
+        if (state && state.lines && state.currentIndex < state.lines.length) {
+            automationLogContainerEl.innerHTML = ''; 
+            appendLog(`SYSTEM RECOVERY: RESUMING DECRYPTION AT PACKET ${state.currentIndex + 1}.`, false, true); // No type for resume log
+            if(allLinesInputEl) {
+                allLinesInputEl.value = state.lines.join('\n');
+            }
+            
+            let resumedBufferContent = '';
+            let resumedFormContent = '';
+            for(let i=0; i < state.currentIndex; i++) {
+                resumedBufferContent += (i > 0 ? '\n' : '') + state.lines[i];
+                resumedFormContent += (i > 0 ? '\n' : '') + state.lines[i];
+            }
+            decryptionBufferDisplayEl.textContent = resumedBufferContent; // Set directly, no type
+            formSnippetsTextareaEl.value = resumedFormContent;
+            
+            setProcessingState(true); // Set processing state before calling processNextStep
+            processNextStep(); 
+        } else if (state && state.lines && state.currentIndex >= state.lines.length) {
+            appendLog('PREVIOUS DECRYPTION SEQUENCE COMPLETED SUCCESSFULLY.', false, true);
+            localStorage.removeItem(STATE_KEY);
+            setProcessingState(false);
+        } else {
+            setProcessingState(false); // Ensure UI is reset if no valid state
+        }
+    }, 300);
+});
+</script>
+{% endblock %}

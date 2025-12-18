@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Sender Panel</h2>
+<form method="POST">
+  {{ form.hidden_tag() }}
+  <div class="mb-3">{{ form.secret.label }} {{ form.secret(class="form-control") }}</div>
+  {{ form.submit(class="btn btn-primary") }}
+</form>
+{% if snippets %}
+  <h4 class="mt-4">Share these snippets (one per line):</h4>
+  <textarea class="form-control" rows="{{ snippets|length }}">{{ snippets|join('\n') }}</textarea>
+{% endif %}
+{% endblock %}
